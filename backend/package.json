@@ -1,0 +1,20 @@
+{
+  "name": "webrtc-lan-signaling",
+  "version": "1.0.0",
+  "description": "WebRTC signaling server for local network file transfer",
+  "main": "signal.js",
+  "scripts": {
+    "start": "node signal.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "ws": "^8.16.0"
+  },
+  "keywords": [
+    "webrtc",
+    "signaling",
+    "lan"
+  ],
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,240 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.body-wrapper {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.container {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 40px;
+  max-width: 600px;
+  width: 100%;
+}
+
+h1 {
+  color: #333;
+  margin-bottom: 10px;
+  font-size: 28px;
+}
+
+.subtitle {
+  color: #666;
+  margin-bottom: 30px;
+  font-size: 14px;
+}
+
+.config-section {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+}
+
+.config-section label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #333;
+}
+
+.config-section input {
+  width: 100%;
+  padding: 10px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "Courier New", monospace;
+}
+
+.config-section input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.role-selection {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.role-btn {
+  flex: 1;
+  padding: 15px;
+  border: 2px solid #e0e0e0;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.role-btn:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+}
+
+.role-btn.active {
+  border-color: #667eea;
+  background: #667eea;
+  color: white;
+}
+
+.sender-section,
+.receiver-section {
+  display: none;
+}
+
+.sender-section.active,
+.receiver-section.active {
+  display: block;
+}
+
+.file-input-wrapper {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.file-input-label {
+  display: block;
+  padding: 40px;
+  border: 3px dashed #ccc;
+  border-radius: 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: #fafafa;
+}
+
+.file-input-label:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+}
+
+.file-input-label.has-file {
+  border-color: #4caf50;
+  background: #f1f8f4;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+.btn {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-primary {
+  background: #667eea;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #5568d3;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 20px;
+  padding: 15px;
+  border-radius: 8px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.status.info {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.status.success {
+  background: #e8f5e9;
+  color: #388e3c;
+}
+
+.status.error {
+  background: #ffebee;
+  color: #d32f2f;
+}
+
+.status.warning {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.info-box {
+  background: #fff9e6;
+  border-left: 4px solid #ffd700;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #666;
+}
+
+.info-box strong {
+  color: #333;
+}
+
+.code-display {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 25px;
+  border-radius: 12px;
+  text-align: center;
+  margin: 20px 0;
+  color: white;
+}
+
+.code-value {
+  font-size: 48px;
+  font-weight: bold;
+  letter-spacing: 8px;
+  font-family: "Courier New", monospace;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+  margin: 10px 0;
+}
+
+.code-input-wrapper {
+  margin-bottom: 20px;
+}
+
+.code-input-wrapper input {
+  width: 100%;
+  padding: 15px;
+  font-size: 32px;
+  text-align: center;
+  letter-spacing: 8px;
+  font-family: "Courier New", monospace;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+}
+
+.code-input-wrapper input:focus {
+  outline: none;
+  border-color: #667eea;
+}
