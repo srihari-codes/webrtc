@@ -387,8 +387,11 @@ function App() {
   return (
     <div className="body-wrapper">
       <div className="container">
-        <h1>🚀 WebRTC LAN File Transfer</h1>
-        <p className="subtitle">Direct P2P • Encrypted • Zero Latency</p>
+        <div className="header">
+          <div className="logo">⚡</div>
+          <h1>Fluxion</h1>
+          <p className="subtitle">Web-RTC based Instant P2P File Transfer</p>
+        </div>
 
         <div className="config-section">
           <label htmlFor="signalingUrl">Signaling Server URL:</label>
@@ -414,13 +417,19 @@ function App() {
             className={`role-btn ${role === "sender" ? "active" : ""}`}
             onClick={() => selectRole("sender")}
           >
-            📤 Send File
+            <span>
+              <span className="role-icon">↑</span>
+              Send
+            </span>
           </button>
           <button
             className={`role-btn ${role === "receiver" ? "active" : ""}`}
             onClick={() => selectRole("receiver")}
           >
-            📥 Receive File
+            <span>
+              <span className="role-icon">↓</span>
+              Receive
+            </span>
           </button>
         </div>
 
@@ -430,25 +439,23 @@ function App() {
               htmlFor="fileInput"
               className={`file-input-label ${selectedFile ? "has-file" : ""}`}
             >
-              <div>
-                {selectedFile ? (
-                  <>
-                    <strong>✅ {selectedFile.name}</strong>
-                    <br />
-                    <span style={{ fontSize: "12px", color: "#666" }}>
-                      Size: {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <strong>📁 Choose a file</strong>
-                    <br />
-                    <span style={{ fontSize: "12px", color: "#999" }}>
-                      Click or drag here
-                    </span>
-                  </>
-                )}
-              </div>
+              {selectedFile ? (
+                <>
+                  <span className="file-icon">✓</span>
+                  <span className="file-name">{selectedFile.name}</span>
+                  <span className="file-size">
+                    {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="file-icon">📁</span>
+                  <span className="file-text">
+                    Drop file here or click to browse
+                  </span>
+                  <span className="file-subtext">Any file type supported</span>
+                </>
+              )}
             </label>
             <input type="file" id="fileInput" onChange={handleFileSelect} />
           </div>
@@ -457,19 +464,20 @@ function App() {
             onClick={initiateSend}
             disabled={sendBtnDisabled}
           >
-            Generate Code & Wait
+            <span>Generate Share Code</span>
           </button>
 
           <div
             className="code-display"
             style={{ display: showCode ? "block" : "none" }}
           >
-            <div style={{ fontSize: "14px", opacity: 0.9 }}>
-              Share this code:
-            </div>
+            <div className="code-label">Share this code</div>
             <div className="code-value">{code}</div>
-            <div style={{ fontSize: "14px", opacity: 0.9 }}>
-              Waiting for receiver...
+            <div className="code-status">
+              <span className="waiting-dot"></span>
+              <span className="waiting-dot"></span>
+              <span className="waiting-dot"></span>
+              <span style={{ marginLeft: "4px" }}>Waiting for receiver</span>
             </div>
           </div>
         </div>
@@ -492,12 +500,20 @@ function App() {
             onClick={initiateReceive}
             disabled={joinBtnDisabled}
           >
-            Join & Download
+            <span>Connect & Download</span>
           </button>
         </div>
 
         {status.message && (
-          <div className={`status ${status.type}`}>{status.message}</div>
+          <div className={`status ${status.type}`}>
+            <span className="status-icon">
+              {status.type === "success" && "✓"}
+              {status.type === "error" && "✕"}
+              {status.type === "warning" && "⚠"}
+              {status.type === "info" && "ℹ"}
+            </span>
+            <span>{status.message}</span>
+          </div>
         )}
       </div>
     </div>
