@@ -131,15 +131,7 @@ function App() {
     setSelectedFile(file);
 
     if (file) {
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
       setSendBtnDisabled(false);
-
-      if (file.size > 1024 * 1024) {
-        updateStatus(
-          "warning",
-          `File is ${sizeMB} MB. Large files may take longer. Recommended: <1 MB`
-        );
-      }
     }
   };
 
