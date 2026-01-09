@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import CryptoJS from "crypto-js";
 import "./App.css";
 
 function App() {
@@ -19,6 +20,79 @@ function App() {
   const [codeInput, setCodeInput] = useState("");
   const [sendBtnDisabled, setSendBtnDisabled] = useState(true);
   const [joinBtnDisabled, setJoinBtnDisabled] = useState(false);
+  const [encryptionKey, setEncryptionKey] = useState("");
+  const [keyInput, setKeyInput] = useState("");
+
+  // Ref to store the encryption key for receiver
+  const decryptionKeyRef = useRef(null);
+
+  // Generate a random 256-bit (32 bytes) key as hex string
+  const generateEncryptionKey = () => {
+    const key = CryptoJS.lib.WordArray.random(32).toString(CryptoJS.enc.Hex);
+    return key;
+  };
+
+  // Encrypt data using AES-256
+  const encryptData = (keyHex, arrayBuffer) => {
+    // Convert ArrayBuffer to WordArray
+    const wordArray = CryptoJS.lib.WordArray.create(
+      new Uint8Array(arrayBuffer)
+    );
+    // Parse key from hex
+    const key = CryptoJS.enc.Hex.parse(keyHex);
+    // Generate random IV
+    const iv = CryptoJS.lib.WordArray.random(16);
+    // Encrypt
+    const encrypted = CryptoJS.AES.encrypt(wordArray, key, {
+      iv: iv,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7,
+    });
+    // Combine IV + ciphertext as base64
+    const combined = iv.concat(encrypted.ciphertext);
+    return combined.toString(CryptoJS.enc.Base64);
+  };
+
+  // Decrypt data using AES-256
+  const decryptData = (keyHex, encryptedBase64) => {
+    try {
+      // Parse key from hex
+      const key = CryptoJS.enc.Hex.parse(keyHex);
+      // Decode base64 to get IV + ciphertext
+      const combined = CryptoJS.enc.Base64.parse(encryptedBase64);
+      // Extract IV (first 16 bytes = 4 words)
+      const iv = CryptoJS.lib.WordArray.create(combined.words.slice(0, 4), 16);
+      // Extract ciphertext (rest)
+      const ciphertext = CryptoJS.lib.WordArray.create(
+        combined.words.slice(4),
+        combined.sigBytes - 16
+      );
+      // Decrypt
+      const decrypted = CryptoJS.AES.decrypt({ ciphertext: ciphertext }, key, {
+        iv: iv,
+        mode: CryptoJS.mode.CBC,
+        padding: CryptoJS.pad.Pkcs7,
+      });
+      // Convert WordArray back to Uint8Array
+      const decryptedArray = wordArrayToUint8Array(decrypted);
+      return decryptedArray;
+    } catch (error) {
+      throw new Error("Decryption failed. Invalid key.");
+    }
+  };
+
+  // Helper: Convert WordArray to Uint8Array
+  const wordArrayToUint8Array = (wordArray) => {
+    const len = wordArray.sigBytes;
+    const words = wordArray.words;
+    const result = new Uint8Array(len);
+    let offset = 0;
+    for (let i = 0; i < len; i++) {
+      const byte = (words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+      result[offset++] = byte;
+    }
+    return result;
+  };
 
   // Refs for WebRTC objects
   const wsRef = useRef(null);
@@ -27,6 +101,12 @@ function App() {
   const iceCandidateQueueRef = useRef([]);
   const roomCodeRef = useRef(null);
   const receivedMetadataRef = useRef(null);
+  const encryptionKeyRef = useRef(null);
+  const receivedChunksRef = useRef([]);
+  const expectedChunksRef = useRef(0);
+
+  // Chunk size for sending (64KB to stay under WebRTC limit)
+  const CHUNK_SIZE = 64 * 1024;
 
   // Generate 6-digit code
   const generateCode = () => {
@@ -232,7 +312,7 @@ function App() {
     }
   };
 
-  // Send File
+  // Send File (encrypted with chunking)
   const sendFile = async () => {
     console.log(
       "[SEND] sendFile() called, file:",
@@ -246,52 +326,138 @@ function App() {
     }
 
     try {
-      console.log("[SEND] Starting file send...");
-      updateStatus("info", `Sending ${selectedFile.name}...`);
+      console.log("[SEND] Starting encrypted file send...");
+      updateStatus("info", `Encrypting ${selectedFile.name}...`);
+
+      const buffer = await selectedFile.arrayBuffer();
+      console.log("[SEND] File buffer size:", buffer.byteLength);
+
+      // Encrypt the file data (returns base64 string)
+      console.log(
+        "[SEND] Encrypting with key:",
+        encryptionKeyRef.current?.substring(0, 8) + "..."
+      );
+      const encryptedBase64 = encryptData(encryptionKeyRef.current, buffer);
+      console.log("[SEND] Encrypted data length:", encryptedBase64.length);
+
+      // Calculate number of chunks
+      const totalChunks = Math.ceil(encryptedBase64.length / CHUNK_SIZE);
+      console.log("[SEND] Total chunks to send:", totalChunks);
 
       const metadata = {
         name: selectedFile.name,
         size: selectedFile.size,
         type: selectedFile.type,
+        encrypted: true,
+        totalChunks: totalChunks,
+        encryptedSize: encryptedBase64.length,
       };
+      console.log("[SEND] Sending metadata:", metadata);
       dataChannelRef.current.send(JSON.stringify({ metadata }));
 
-      const buffer = await selectedFile.arrayBuffer();
-      dataChannelRef.current.send(buffer);
+      // Small delay to ensure metadata is processed first
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Send chunks
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, encryptedBase64.length);
+        const chunk = encryptedBase64.slice(start, end);
+
+        // Wait for buffer to drain if needed
+        while (dataChannelRef.current.bufferedAmount > 1024 * 1024) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+
+        dataChannelRef.current.send(JSON.stringify({ chunk, index: i }));
+
+        if ((i + 1) % 10 === 0 || i === totalChunks - 1) {
+          updateStatus(
+            "info",
+            `Sending... ${Math.round(((i + 1) / totalChunks) * 100)}%`
+          );
+        }
+      }
+
+      console.log("[SEND] All chunks sent!");
+      dataChannelRef.current.send(JSON.stringify({ complete: true }));
 
       updateStatus(
         "success",
-        `File sent successfully! (${(selectedFile.size / 1024).toFixed(2)} KB)`
+        `Encrypted file sent successfully! (${(
+          selectedFile.size / 1024
+        ).toFixed(2)} KB)`
       );
     } catch (error) {
+      console.error("[SEND] Error:", error);
       updateStatus("error", "Failed to send file: " + error.message);
     }
   };
 
-  // Receive File
+  // Receive File (decrypt if encrypted, with chunking support)
   const receiveFile = (event) => {
-    console.log(
-      "[RECEIVE] Got message, type:",
-      typeof event.data,
-      "size:",
-      event.data.byteLength || event.data.length
-    );
     try {
-      if (!receivedMetadataRef.current) {
-        console.log("[RECEIVE] Parsing metadata...");
-        const data = JSON.parse(event.data);
-        if (data.metadata) {
-          receivedMetadataRef.current = data.metadata;
-          updateStatus(
-            "info",
-            `Receiving ${receivedMetadataRef.current.name}...`
-          );
-          return;
-        }
+      const data = JSON.parse(event.data);
+
+      // First message: metadata
+      if (data.metadata) {
+        console.log("[RECEIVE] Got metadata:", data.metadata);
+        receivedMetadataRef.current = data.metadata;
+        receivedChunksRef.current = new Array(data.metadata.totalChunks);
+        expectedChunksRef.current = data.metadata.totalChunks;
+        updateStatus(
+          "info",
+          `Receiving ${receivedMetadataRef.current.name}...`
+        );
+        return;
       }
 
-      if (event.data instanceof ArrayBuffer) {
-        const blob = new Blob([event.data], {
+      // Chunk message
+      if (data.chunk !== undefined && data.index !== undefined) {
+        receivedChunksRef.current[data.index] = data.chunk;
+        const received = receivedChunksRef.current.filter(
+          (c) => c !== undefined
+        ).length;
+        if (received % 10 === 0 || received === expectedChunksRef.current) {
+          updateStatus(
+            "info",
+            `Receiving... ${Math.round(
+              (received / expectedChunksRef.current) * 100
+            )}%`
+          );
+        }
+        return;
+      }
+
+      // Complete message - reassemble and decrypt
+      if (data.complete) {
+        console.log("[RECEIVE] All chunks received, reassembling...");
+        const encryptedBase64 = receivedChunksRef.current.join("");
+        console.log("[RECEIVE] Reassembled size:", encryptedBase64.length);
+
+        let fileData;
+        if (decryptionKeyRef.current) {
+          updateStatus("info", "Decrypting file...");
+          try {
+            fileData = decryptData(decryptionKeyRef.current, encryptedBase64);
+            console.log(
+              "[RECEIVE] Decryption successful, size:",
+              fileData.length
+            );
+          } catch (decryptError) {
+            console.error("[RECEIVE] Decryption error:", decryptError);
+            updateStatus("error", "Decryption failed. Invalid key.");
+            receivedMetadataRef.current = null;
+            receivedChunksRef.current = [];
+            return;
+          }
+        } else {
+          console.error("[RECEIVE] No decryption key available");
+          updateStatus("error", "No decryption key available");
+          return;
+        }
+
+        const blob = new Blob([fileData], {
           type: receivedMetadataRef.current?.type || "application/octet-stream",
         });
         const url = URL.createObjectURL(blob);
@@ -305,13 +471,15 @@ function App() {
 
         updateStatus(
           "success",
-          `File received and downloaded! (${(blob.size / 1024).toFixed(2)} KB)`
+          `File decrypted and downloaded! (${(blob.size / 1024).toFixed(2)} KB)`
         );
 
         setTimeout(() => URL.revokeObjectURL(url), 100);
         receivedMetadataRef.current = null;
+        receivedChunksRef.current = [];
       }
     } catch (error) {
+      console.error("[RECEIVE] Error:", error);
       updateStatus("error", "Failed to receive file: " + error.message);
     }
   };
@@ -329,6 +497,11 @@ function App() {
       setShowCode(true);
       setSendBtnDisabled(true);
 
+      // Generate encryption key (hex string)
+      const key = generateEncryptionKey();
+      encryptionKeyRef.current = key;
+      setEncryptionKey(key);
+
       await connectWebSocket(newCode);
       console.log("[SENDER] Room joined, creating peer connection");
       initPeerConnection();
@@ -344,7 +517,7 @@ function App() {
 
       updateStatus(
         "info",
-        `Share code ${newCode} with receiver. Waiting for connection...`
+        `Share code ${newCode} and encryption key with receiver. Waiting for connection...`
       );
     } catch (error) {
       updateStatus("error", "Failed to initiate: " + error.message);
@@ -354,11 +527,29 @@ function App() {
   // Receiver: Initiate Receive
   const initiateReceive = async () => {
     const inputCode = codeInput.trim();
+    const inputKey = keyInput.trim();
 
     if (!inputCode || inputCode.length !== 6) {
       updateStatus("error", "Please enter a valid 6-digit code");
       return;
     }
+
+    if (!inputKey) {
+      updateStatus("error", "Please enter the encryption key");
+      return;
+    }
+
+    // Validate the key format (should be 64 hex characters for 256-bit key)
+    if (!/^[0-9a-fA-F]{64}$/.test(inputKey)) {
+      updateStatus(
+        "error",
+        "Invalid encryption key format (expected 64 hex characters)"
+      );
+      return;
+    }
+
+    // Store the decryption key
+    decryptionKeyRef.current = inputKey;
 
     try {
       setJoinBtnDisabled(true);
@@ -377,7 +568,10 @@ function App() {
 
       console.log("[RECEIVER] Ready and waiting for offer...");
       sendSignaling({ type: "peer_ready" });
-      updateStatus("info", `Joined room ${inputCode}. Waiting for file...`);
+      updateStatus(
+        "info",
+        `Joined room ${inputCode}. Waiting for encrypted file...`
+      );
     } catch (error) {
       updateStatus("error", "Failed to initiate: " + error.message);
       setJoinBtnDisabled(false);
@@ -405,11 +599,12 @@ function App() {
         </div>
 
         <div className="info-box">
-          <strong>💡 New Flow:</strong>
+          <strong>💡 Encrypted File Transfer:</strong>
           <br />
-          <strong>Sender:</strong> Select file → Get 6-digit code → Share code
+          <strong>Sender:</strong> Select file → Get code + encryption key →
+          Share both
           <br />
-          <strong>Receiver:</strong> Enter code → Download file instantly
+          <strong>Receiver:</strong> Enter code + key → Decrypt & download file
         </div>
 
         <div className="role-selection">
@@ -473,6 +668,54 @@ function App() {
           >
             <div className="code-label">Share this code</div>
             <div className="code-value">{code}</div>
+            <div className="code-label" style={{ marginTop: "16px" }}>
+              Encryption Key (share securely)
+            </div>
+            <div style={{ position: "relative" }}>
+              <div
+                className="key-value"
+                style={{
+                  fontSize: "12px",
+                  wordBreak: "break-all",
+                  backgroundColor: "#1a1a2e",
+                  padding: "12px",
+                  paddingRight: "50px",
+                  borderRadius: "8px",
+                  fontFamily: "monospace",
+                  color: "#00d4ff",
+                  userSelect: "all",
+                  cursor: "text",
+                }}
+              >
+                {encryptionKey}
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(encryptionKey);
+                  updateStatus(
+                    "success",
+                    "Encryption key copied to clipboard!"
+                  );
+                }}
+                style={{
+                  position: "absolute",
+                  right: "8px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "#00d4ff",
+                  border: "none",
+                  borderRadius: "4px",
+                  padding: "6px 10px",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  color: "#000",
+                  fontWeight: "bold",
+                }}
+                title="Copy key"
+              >
+                📋
+              </button>
+            </div>
             <div className="code-status">
               <span className="waiting-dot"></span>
               <span className="waiting-dot"></span>
@@ -486,6 +729,16 @@ function App() {
           className={`receiver-section ${role === "receiver" ? "active" : ""}`}
         >
           <div className="code-input-wrapper">
+            <label
+              style={{
+                color: "#888",
+                fontSize: "12px",
+                marginBottom: "4px",
+                display: "block",
+              }}
+            >
+              6-Digit Code
+            </label>
             <input
               type="text"
               value={codeInput}
@@ -493,6 +746,25 @@ function App() {
               placeholder="000000"
               maxLength="6"
               pattern="[0-9]{6}"
+            />
+          </div>
+          <div className="code-input-wrapper" style={{ marginTop: "12px" }}>
+            <label
+              style={{
+                color: "#888",
+                fontSize: "12px",
+                marginBottom: "4px",
+                display: "block",
+              }}
+            >
+              Encryption Key
+            </label>
+            <input
+              type="text"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              placeholder="Paste encryption key here"
+              style={{ fontSize: "12px", fontFamily: "monospace" }}
             />
           </div>
           <button
